@@ -60,6 +60,8 @@ class QdrantOperations:
             )
             return True
         except Exception as e:
+            if "already exists" in str(e):
+                return False
             print(f"创建集合时出错：{e}")
             return False
     
@@ -132,4 +134,91 @@ class QdrantOperations:
             )
         except Exception as e:
             print(f"搜索时出错：{e}")
+            return []
+
+    def upsert_points_batch(
+        self,
+        collection_name: str,
+        points: List[Dict]
+    ) -> bool:
+        """
+        批量上传向量数据
+        :param collection_name: 集合名称
+        :param points: 点数据列表，每个点包含以下字段：
+            - id: 点ID
+            - vector: 向量数据
+            - payload: 附加数据
+        :return: 是否成功上传
+        """
+        try:
+            self.client.upsert(
+                collection_name=collection_name,
+                wait=True,
+                points=[
+                    rest.PointStruct(
+                        id=point["id"],
+                        vector=point["vector"],
+                        payload=point["payload"]
+                    )
+                    for point in points
+                ]
+            )
+            return True
+        except Exception as e:
+            print(f"上传失败: {str(e)}")
+            return False
+
+    def query_points(
+        self,
+        collection_name: str,
+        vector: List[float],
+        limit: int = 10,
+        score_threshold: float = 0.0
+    ) -> List[rest.ScoredPoint]:
+        """
+        搜索相似向量
+        :param collection_name: 集合名称
+        :param vector: 查询向量
+        :param limit: 返回结果数量限制
+        :param score_threshold: 相似度阈值
+        :return: 搜索结果列表
+        """
+        try:
+            results = self.client.search(
+                collection_name=collection_name,
+                query_vector=vector,
+                limit=limit,
+                score_threshold=score_threshold
+            )
+            return results
+        except Exception as e:
+            print(f"搜索失败: {str(e)}")
+            return []
+
+    def query_batch_points(
+        self,
+        requests: List[Dict]
+    ) -> List[List[rest.ScoredPoint]]:
+        """
+        批量搜索相似向量
+        :param requests: 搜索请求列表，每个请求包含以下字段：
+            - collection_name: 集合名称
+            - vector: 查询向量
+            - limit: 返回结果数量限制
+            - score_threshold: 相似度阈值
+        :return: 搜索结果列表的列表
+        """
+        try:
+            results = []
+            for request in requests:
+                result = self.query_points(
+                    collection_name=request["collection_name"],
+                    vector=request["vector"],
+                    limit=request["limit"],
+                    score_threshold=request["score_threshold"]
+                )
+                results.append(result)
+            return results
+        except Exception as e:
+            print(f"批量搜索失败: {str(e)}")
             return [] 

@@ -1,118 +1,113 @@
 """
-向量生成模块。
+文本向量生成模块。
 """
-from abc import ABC, abstractmethod
-from typing import List, Optional, Dict
+from typing import List
 import numpy as np
-from sentence_transformers import SentenceTransformer
-
-def normalize_vector(v: np.ndarray) -> np.ndarray:
-    """标准化向量"""
-    norm = np.linalg.norm(v)
-    if norm == 0:
-        return v
-    return v / norm
+import torch
+from abc import ABC, abstractmethod
+from transformers import AutoTokenizer, AutoModel
+import torch.nn.functional as F
 
 class TextEmbedding(ABC):
-    """文本向量生成抽象基类"""
-    
-    @abstractmethod
-    def encode(self, texts: List[str]) -> List[np.ndarray]:
-        """
-        将文本转换为向量。
-        
-        参数：
-            texts: 要转换的文本列表
-            
-        返回：
-            List[np.ndarray]: 向量列表
-        """
-        pass
+    """文本向量生成基类"""
     
     @property
     @abstractmethod
-    def dimension(self) -> int:
-        """返回向量维度"""
+    def vector_size(self) -> int:
+        """向量维度"""
+        pass
+    
+    @abstractmethod
+    def generate_vector(self, texts: List[str]) -> List[np.ndarray]:
+        """
+        生成文本的向量表示
+        :param texts: 文本列表
+        :return: 向量列表
+        """
         pass
 
 class BGEEmbedding(TextEmbedding):
-    """BGE模型的向量生成实现"""
+    """BGE 文本向量生成类"""
     
-    def __init__(
-        self,
-        model_name: str = "BAAI/bge-large-zh-v1.5",
-        normalize: bool = True,
-        prefix: str = "为这个句子生成表示："
-    ):
+    def __init__(self, model_name: str = "BAAI/bge-large-zh-v1.5"):
         """
-        初始化BGE向量生成器。
+        初始化 BGE 向量生成器。
         
         参数：
             model_name: 模型名称
-            normalize: 是否标准化向量
-            prefix: 文本前缀
         """
-        self.model = SentenceTransformer(model_name)
-        self.normalize = normalize
-        self.prefix = prefix
-        self._dimension = self.model.encode("测试").shape[0]
-    
-    def encode(self, texts: List[str]) -> List[np.ndarray]:
-        """
-        将文本转换为向量。
-        
-        参数：
-            texts: 要转换的文本列表
-            
-        返回：
-            List[np.ndarray]: 向量列表
-        """
-        processed_texts = [f"{self.prefix}{text}" for text in texts]
-        embeddings = self.model.encode(processed_texts)
-        if self.normalize:
-            return [normalize_vector(emb) for emb in embeddings]
-        return [emb for emb in embeddings]
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.model = AutoModel.from_pretrained(model_name)
+        self.model.eval()
+        self._vector_size = self.model.config.hidden_size
     
     @property
-    def dimension(self) -> int:
-        """返回向量维度"""
-        return self._dimension
+    def vector_size(self) -> int:
+        """向量维度"""
+        return self._vector_size
+    
+    def generate_vector(self, texts: List[str]) -> List[np.ndarray]:
+        """
+        生成文本的向量表示
+        :param texts: 文本列表
+        :return: 向量列表
+        """
+        # 对文本进行编码
+        encoded_input = self.tokenizer(
+            texts,
+            padding=True,
+            truncation=True,
+            max_length=512,
+            return_tensors='pt'
+        )
+
+        # 生成向量
+        with torch.no_grad():
+            model_output = self.model(**encoded_input)
+            embeddings = model_output[0][:, 0]  # 使用 [CLS] token 的输出作为句子表示
+            embeddings = F.normalize(embeddings, p=2, dim=1)  # L2 归一化
+
+        return [embedding.numpy() for embedding in embeddings]
 
 class Text2VecEmbedding(TextEmbedding):
-    """Text2Vec模型的向量生成实现"""
+    """Text2Vec 文本向量生成类"""
     
-    def __init__(
-        self,
-        model_name: str = "shibing624/text2vec-base-chinese",
-        normalize: bool = True
-    ):
+    def __init__(self, model_name: str = "shibing624/text2vec-base-chinese"):
         """
-        初始化Text2Vec向量生成器。
+        初始化 Text2Vec 向量生成器。
         
         参数：
             model_name: 模型名称
-            normalize: 是否标准化向量
         """
-        self.model = SentenceTransformer(model_name)
-        self.normalize = normalize
-        self._dimension = self.model.encode("测试").shape[0]
-    
-    def encode(self, texts: List[str]) -> List[np.ndarray]:
-        """
-        将文本转换为向量。
-        
-        参数：
-            texts: 要转换的文本列表
-            
-        返回：
-            List[np.ndarray]: 向量列表
-        """
-        embeddings = self.model.encode(texts)
-        if self.normalize:
-            return [normalize_vector(emb) for emb in embeddings]
-        return [emb for emb in embeddings]
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
+        self.model = AutoModel.from_pretrained(model_name)
+        self.model.eval()
+        self._vector_size = self.model.config.hidden_size
     
     @property
-    def dimension(self) -> int:
-        """返回向量维度"""
-        return self._dimension 
+    def vector_size(self) -> int:
+        """向量维度"""
+        return self._vector_size
+    
+    def generate_vector(self, texts: List[str]) -> List[np.ndarray]:
+        """
+        生成文本的向量表示
+        :param texts: 文本列表
+        :return: 向量列表
+        """
+        # 对文本进行编码
+        encoded_input = self.tokenizer(
+            texts,
+            padding=True,
+            truncation=True,
+            max_length=512,
+            return_tensors='pt'
+        )
+
+        # 生成向量
+        with torch.no_grad():
+            model_output = self.model(**encoded_input)
+            embeddings = model_output[0][:, 0]  # 使用 [CLS] token 的输出作为句子表示
+            embeddings = F.normalize(embeddings, p=2, dim=1)  # L2 归一化
+
+        return [embedding.numpy() for embedding in embeddings] 
