@@ -19,6 +19,23 @@ class QdrantOperations:
         """
         self.client = client
     
+    def delete_collection(self, collection_name: str) -> bool:
+        """
+        删除指定的集合。
+        
+        参数：
+            collection_name: 集合名称
+            
+        返回：
+            bool: 成功返回True
+        """
+        try:
+            self.client.delete_collection(collection_name=collection_name)
+            return True
+        except Exception as e:
+            print(f"删除集合时出错：{e}")
+            return False
+
     def create_collection(
         self,
         collection_name: str,

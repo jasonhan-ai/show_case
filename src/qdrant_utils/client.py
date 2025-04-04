@@ -17,7 +17,7 @@ class QdrantClientConfig:
         host: Optional[str] = None,
         port: Optional[int] = None,
         api_key: Optional[str] = None,
-        https: bool = True
+        https: bool = False
     ):
         """
         初始化Qdrant客户端配置。
